@@ -488,7 +488,7 @@ updateProgress = function(task_id) {
 
       if (progressObj.total > 0) {
         // If we haven't tried one file, no need to get results.
-        $.getJSON('/services/ingestionresult', renderResult);
+        $.getJSON('/services/ingestionresult?task_id='+task_id, renderResult);
       }
     } else {
       // Calls itself again after 1000ms.
