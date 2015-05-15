@@ -52,47 +52,54 @@ redis_lock = threading.Lock()
 
 
 def get_stats(task_id, val):
-	with red_con.lock(task_id):
-		status  = json.loads(red_con.get(task_id))
-		return status[val]
+	redis_lock.acquire()
+	# with red_con.lock(task_id):
+	status  = json.loads(red_con.get(task_id))
+	redis_lock.release()
+	return status[val]
+
 
 def check_finish(task_id):
-	with red_con.lock(task_id):
-		status  = json.loads(red_con.get(task_id))
-		if status["FailCount"] + status["SuccessCount"] + status["SkipCount"] == status["recordCount"]:
-			return True
-		else:
-			return False
+	redis_lock.acquire()
+	# with red_con.lock(task_eid):
+	status  = json.loads(red_con.get(task_id))
+	redis_lock.release()
+	if status["FailCount"] + status["SuccessCount"] + status["SkipCount"] == status["recordCount"]:
+		return True
+	else:
+		return False
 
 
 def update_stats(task_id, update, val):
-	with red_con.lock(task_id):
-		status  = json.loads(red_con.get(task_id))
-		logger.debug(json.dumps(status))
-		if update == "SkipCount":
-			# already updated to db
-			status["SkipCount"] += 1
-		elif update == "recordCount":
-			# already updated to db
-			status["recordCount"] += 1
+	redis_lock.acquire()
+	# with red_con.lock(task_id):
+	status  = json.loads(red_con.get(task_id))
+	logger.debug(json.dumps(status))
+	if update == "SkipCount":
+		# already updated to db
+		status["SkipCount"] += 1
+	elif update == "recordCount":
+		# already updated to db
+		status["recordCount"] += 1
+	else:
+		if val == None:
+			status["SuccessCount"] += 1
+			commit_lock.acquire()
+			model.update_batch(task_id, "SuccessCount", status["SuccessCount"])
+			commit_lock.release()
 		else:
-			if val == None:
-				status["SuccessCount"] += 1
-				commit_lock.acquire()
-				model.update_batch(task_id, "SuccessCount", status["SuccessCount"])
-				commit_lock.release()
-			else:
-				status["FailCount"] += 1
-				commit_lock.acquire()
-				model.update_batch(task_id, "FailCount", status["FailCount"])
-				commit_lock.release()
-				status["Errors"].append(val)
-		logger.debug(json.dumps(status))
-		red_con.set(task_id, json.dumps(status))
-		if check_finish(task_id):
-			return True, json.dumps(status["Errors"])
-		else:
-			return False, None
+			status["FailCount"] += 1
+			commit_lock.acquire()
+			model.update_batch(task_id, "FailCount", status["FailCount"])
+			commit_lock.release()
+			status["Errors"].append(val)
+	logger.debug(json.dumps(status))
+	red_con.set(task_id, json.dumps(status))
+	redis_lock.release()
+	if check_finish(task_id):
+		return True, json.dumps(status["Errors"])
+	else:
+		return False, None
 
 @app.task
 def _upload_task(task_id, values):
@@ -169,7 +176,7 @@ def _upload_task(task_id, values):
    	model.update_batch(task_id, "RecordCount", get_stats(task_id , "recordCount"))
    	model.commit()
    	if check_finish(task_id):
-   		model.update_status(batch_id, get_stats(task_id , "Errors"))
+   		model.update_status(batch_id, json.dumps(get_stats(task_id , "Errors")))
    		# post csv
    		_upload_csv(batch_id, _get_conn())
    	commit_lock.release()
@@ -258,7 +265,7 @@ def _upload_single_image(image_record_id, batch_id, conn, task_id):
 			commit_lock.acquire()
 			# post csv
 			_upload_csv(batch_id, _get_conn())
-			model.update_status(batch_id, err)
+			model.update_status(batch_id, json.dumps(err))
 			commit_lock.release()
 		# model.update_status(batch_id, Error)
 		# model.commit()
