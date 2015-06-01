@@ -11,6 +11,6 @@ This Version uses Celery as task  manager. Please install celery and redis befor
 
 Documentation
 =============
-Documentation for this application is hosted on `Github <https://github.com/iDigBio/idigbio-ingestion-tool/wiki>`_.
+https://github.com/skoppisetty/idigbio-appliance/wiki
 
 .. image:: https://www.idigbio.org/sites/all/themes/idigbio_org/logo.png
